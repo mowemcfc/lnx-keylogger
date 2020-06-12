@@ -27,12 +27,10 @@ def get_kb_cfile():
 
         pattern = re.compile("EV=120013") # 120013 is the 'minimum' bitmask for keyboard events TODO: other bitmasks? different regex?
 
-
         for idx, elt in enumerate(handlers): # search handlers list for the event bitmask, returning the value before this which is the
             if pattern.search(elt):          # name of the event file
                 line = handlers[idx-1]
 
-        print(line)
 
         pattern = re.compile("event\d?[0-9]|[1-9]0")
         cfile_path = "/dev/input/" + pattern.search(line).group(0) # find character device file event#
