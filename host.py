@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from datetime import datetime
 
 logdir_path = "logs"
-HOST_ADDR = ("localhost", 80)
+HOST_ADDR = ("192.168.0.14", 80)
 
 class Packet:
     def __init__(self):
