@@ -126,18 +126,18 @@ def main():
             print("Creation of directory at", logdir_path, "failed, terminating")
             exit()
 
-    tcp_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create TCP socket
 
     print("server started, waiting for clients on", HOST_ADDR)
-    tcp_host.bind(HOST_ADDR)
-    tcp_host.listen(5)
+    tcp_host.bind(HOST_ADDR) # bind TCP socket
+    tcp_host.listen(5) # listen for connections
     print("listening...")
 
     threads = []
     while True:
-        c, addr = tcp_host.accept()
+        c, addr = tcp_host.accept() # accept new tcp connection
         print("connection accepted from", addr)
-        t = threading.Thread(target=on_new_client, args=(c,addr,))
+        t = threading.Thread(target=on_new_client, args=(c,addr,)) # create new instance of server to handle new tcp connection
         threads.append(t)
         t.start()
 
