@@ -12,10 +12,12 @@ To run the hostfile on a remote network, you will require special network config
 ## To run
 You will first require a running server for the host to send keystroke data back to.
 
-'sudo python3 server.py'
+`sudo python3 server.py`
 
 From here, you can run the host script.
 
-'sudo python3 host.py
+`sudo python3 host.py`
+
+
 
 Written by mowemcfc.
